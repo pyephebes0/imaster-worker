@@ -27,11 +27,11 @@ const worker = new Worker(
       const { userId, postId } = job.data;
 
       // ตรวจสอบ flag หยุดใน Redis
-      //const stopFlag = await connection.get(`stop:${userId}`);
-      //if (stopFlag === 'true') {
-      //  console.log(`⛔️ User ${userId} สั่งหยุด loop แล้ว`);
-      //  return; // ไม่สร้าง job ใหม่
-      //}
+      const stopFlag = await connection.get(`stop:${userId}`);
+      if (stopFlag === 'true') {
+        console.log(`⛔️ User ${userId} สั่งหยุด loop แล้ว`);
+        return; // ไม่สร้าง job ใหม่
+      }
 
       const post = await Post.findById(postId);
       if (!post) {
