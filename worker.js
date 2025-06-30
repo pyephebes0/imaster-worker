@@ -1,6 +1,6 @@
 // src/lib/server/worker.js
 import { Worker } from 'bullmq';
-import { postQueue } from './lib/queue'; 
+import { postQueue } from './lib/queue.js'; 
 import { connection } from './lib/redisConnection.js'; // redis client
 import { connectDB } from './lib/db.js';
 import { tweetToTwitterAccount } from './lib/twitter-api/twitterClient.js';
