@@ -1,0 +1,25 @@
+{
+  "name": "worker",
+  "version": "1.0.0",
+  "main": "worker.js",
+  "scripts": {
+    "start": "node worker.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pyephebes0/imaster-worker.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/pyephebes0/imaster-worker/issues"
+  },
+  "homepage": "https://github.com/pyephebes0/imaster-worker#readme",
+  "dependencies": {
+    "bullmq": "^4.0.0",
+    "ioredis": "^5.0.0",
+    "mongoose": "^8.0.0",
+    "dotenv": "^16.0.0"
+  }
+}
