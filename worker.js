@@ -1,5 +1,6 @@
 // src/lib/server/worker.js
 import { Worker } from 'bullmq';
+import { postQueue } from '$lib/server/queue'; 
 import { connection } from './lib/redisConnection.js'; // redis client
 import { connectDB } from './lib/db.js';
 import { tweetToTwitterAccount } from './lib/twitter-api/twitterClient.js';
@@ -75,7 +76,7 @@ const worker = new Worker(
       await new Promise(resolve => setTimeout(resolve, delayMs));
 
       // เพิ่ม job ใหม่ (loop)
-      await job.queue.add(
+      await postQueue.add(
         'post-job',
         { userId, postId },
         { removeOnComplete: false, removeOnFail: false }
