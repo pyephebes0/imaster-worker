@@ -1,6 +1,6 @@
 // src/lib/server/worker.js
 import { Worker } from 'bullmq';
-import { connection } from './lib/redisConnection.js';
+import { connection } from './lib/redisConnection.js'; // redis client
 import { connectDB } from './lib/db.js';
 import { tweetToTwitterAccount } from './lib/twitter-api/twitterClient.js';
 import { PostLog } from './lib/models/PostLog.js';
@@ -9,37 +9,45 @@ import { Post } from './lib/models/Post.js';
 
 console.log('👷‍♂️ [INIT] worker.js started');
 
-// สร้าง Worker ที่ฟัง Queue ชื่อ 'post-queue'
+function getTimeString() {
+  return new Date().toLocaleString('th-TH', {
+    hour12: false,
+    timeZone: 'Asia/Bangkok',
+  });
+}
+
 const worker = new Worker(
   'post-queue',
   async job => {
     try {
-      console.log(`📥 รับงาน: [${job.id}] ${job.name}`, job.data);
+      console.log(`📥 รับงาน: [${job.id}] ${job.name} [${getTimeString()}]`, job.data);
 
-      // เชื่อมต่อ MongoDB
       await connectDB();
 
       const { userId, postId } = job.data;
 
-      // ดึงโพสต์จากฐานข้อมูล
+      // ตรวจสอบ flag หยุดใน Redis
+      const stopFlag = await connection.get(`stop:${userId}`);
+      if (stopFlag === 'true') {
+        console.log(`⛔️ User ${userId} สั่งหยุด loop แล้ว`);
+        return; // ไม่สร้าง job ใหม่
+      }
+
       const post = await Post.findById(postId);
       if (!post) {
-        console.warn(`⚠️ ไม่พบโพสต์ในฐานข้อมูล: ${postId}`);
+        console.warn(`⚠️ ไม่พบโพสต์ id: ${postId}`);
         return;
       }
 
-      // ดึงบัญชี Twitter ของ user
       const twitterAccounts = await getTwitterAccountsByUserId(userId);
       if (!twitterAccounts?.length) {
-        console.warn(`⚠️ ไม่พบบัญชี Twitter ที่เชื่อมกับ user ${userId}`);
+        console.warn(`⚠️ ไม่พบบัญชี Twitter userId=${userId}`);
         return;
       }
 
-      // โพสต์ไปยังแต่ละบัญชี
       for (const account of twitterAccounts) {
         try {
           await tweetToTwitterAccount(account, post);
-
           await PostLog.create({
             postId: post._id,
             userId,
@@ -47,8 +55,7 @@ const worker = new Worker(
             status: 'success',
             tweetedAt: new Date()
           });
-
-          console.log(`✅ โพสต์สำเร็จไปยัง @${account.username}`);
+          console.log(`✅ โพสต์สำเร็จ @${account.username}`);
         } catch (err) {
           await PostLog.create({
             postId: post._id,
@@ -58,31 +65,35 @@ const worker = new Worker(
             errorMessage: err.message,
             tweetedAt: new Date()
           });
-
-          console.error(`❌ โพสต์ล้มเหลวที่ @${account.username}:`, err.message);
+          console.error(`❌ โพสต์ล้มเหลว @${account.username}:`, err.message);
         }
       }
+
+      // รอ delay ตาม post.duration (นาที) ก่อนเพิ่ม job ใหม่
+      const delayMs = (post.duration || 1) * 60 * 1000;
+      console.log(`🕒 รอ ${delayMs / 1000} วินาที ก่อนเพิ่ม job ใหม่`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+
+      // เพิ่ม job ใหม่ (loop)
+      await job.queue.add(
+        'post-job',
+        { userId, postId },
+        { removeOnComplete: false, removeOnFail: false }
+      );
+      console.log(`🔁 เพิ่ม job ใหม่ (loop) เรียบร้อย`);
+
     } catch (err) {
-      console.error('🚨 ERROR ใน job handler:', err);
-      throw err; // ให้ BullMQ จัดการ retry
+      console.error('🚨 ERROR ใน worker:', err);
+      throw err; // ให้ BullMQ retry job ได้
     }
   },
   { connection }
 );
 
-function getTimeString() {
-  return new Date().toLocaleString('th-TH', {
-    hour12: false,
-    timeZone: 'Asia/Bangkok', // กำหนด timezone ตามที่ต้องการ
-  });
-}
-
-// log เมื่อ job เสร็จสมบูรณ์
 worker.on('completed', job => {
-  console.log(`🎉 [COMPLETED] [${getTimeString()}] Job ${job.id} สำเร็จแล้ว`);
+  console.log(`🎉 [COMPLETED] [${getTimeString()}] Job ${job.id} สำเร็จ`);
 });
 
-// log เมื่อ job ล้มเหลว
 worker.on('failed', (job, err) => {
   console.error(`❌ [FAILED] [${getTimeString()}] Job ${job.id} ล้มเหลว:`, err.message);
 });
