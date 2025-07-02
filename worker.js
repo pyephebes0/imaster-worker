@@ -6,6 +6,7 @@ import { connectDB } from './lib/db.js';
 import { tweetToTwitterAccount } from './lib/twitter-api/twitterClient.js';
 import { PostLog } from './lib/models/PostLog.js';
 import { getTwitterAccountsByUserId } from './lib/models/TwitterAccount.js';
+import { refreshTokenIfNeeded } from './lib/twitter-api/tokenUtils.js';
 import { Post } from './lib/models/Post.js';
 
 console.log('👷‍♂️ [INIT] worker.js started');
@@ -48,7 +49,12 @@ const worker = new Worker(
 
       for (const account of twitterAccounts) {
         try {
-          await tweetToTwitterAccount(account, post);
+          // ✅ เช็คและ refresh ถ้าจำเป็น
+          const freshAccount = await refreshTokenIfNeeded(account);
+
+          // ✅ ใช้ token ล่าสุด
+          await tweetToTwitterAccount(freshAccount, post);
+          
           await PostLog.create({
             postId: post._id,
             userId,
