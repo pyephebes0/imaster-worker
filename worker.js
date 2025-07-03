@@ -26,6 +26,45 @@ const worker = new Worker(
 
       await connectDB();
 
+      // เพิ่มกรณี job.name === 'refresh-job'
+      if (job.name === 'refresh-job') {
+        console.log(`🔄 เริ่มงานรีเฟรช token ทั้งหมด`);
+
+        // สมมติรับ userId ใน job.data หรือจะรีเฟรชทุก user ก็ได้ตามต้องการ
+        const { userId } = job.data;
+
+        // ดึงบัญชี Twitter ของ user นี้ทั้งหมด
+        const twitterAccounts = await getTwitterAccountsByUserId(userId);
+
+        if (!twitterAccounts?.length) {
+          console.log(`⚠️ ไม่พบบัญชี Twitter สำหรับ userId=${userId}`);
+        } else {
+          for (const account of twitterAccounts) {
+            try {
+              const freshAccount = await refreshTokenIfNeeded(account);
+              console.log(`✅ รีเฟรช token สำเร็จ @${account.username}`);
+            } catch (err) {
+              console.error(`❌ รีเฟรช token ล้มเหลว @${account.username}:`, err.message);
+            }
+          }
+        }
+
+        // รอ 10 นาที (600,000 ms) ก่อนเพิ่ม job refresh-job ใหม่ (loop)
+        const delayMs = 10 * 60 * 1000;
+        console.log(`🕒 รอ ${delayMs / 1000} วินาทีก่อนเพิ่ม refresh-job ใหม่`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+
+        // เพิ่ม job refresh-job ใหม่ (loop)
+        await postQueue.add(
+          'refresh-job',
+          { userId }, // ถ้าจะรีเฟรชทุก user ควรทำ logic แยก หรือ loop ดึง userIds มารวม
+          { removeOnComplete: true, removeOnFail: true }
+        );
+        console.log(`🔁 เพิ่ม refresh-job ใหม่ (loop) เรียบร้อย`);
+
+        return; // จบ job นี้
+      }
+
       const { userId, postId } = job.data;
 
       // ตรวจสอบ flag หยุดใน Redis
@@ -128,5 +167,15 @@ worker.on('completed', job => {
 worker.on('failed', (job, err) => {
   console.error(`❌ [FAILED] [${getTimeString()}] Job ${job.id} ล้มเหลว:`, err.message);
 });
+
+// ถ้าอยากเริ่ม job refresh ตอน worker โหลดครั้งแรก (แค่ครั้งเดียว)
+async function startRefreshJobOnce() {
+  const jobs = await postQueue.getJobs(['waiting', 'delayed', 'active']);
+  if (!jobs.some(j => j.name === 'refresh-job')) {
+    await postQueue.add('refresh-job', {}, { removeOnComplete: true, removeOnFail: true });
+    console.log('🆕 เพิ่ม refresh-job เริ่มต้น');
+  }
+}
+startRefreshJobOnce();
 
 export default worker;
