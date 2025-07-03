@@ -69,7 +69,11 @@ const worker = new Worker(
             userId,
             twitterAccountId: account._id,
             status: 'failed',
-            errorMessage: err.message,
+            errorMessage: JSON.stringify(
+              err.response?.data || err.message || err,
+              Object.getOwnPropertyNames(err),
+              2
+            ),
             tweetedAt: new Date()
           });
           console.error(`❌ โพสต์ล้มเหลว @${account.username}:`, err.message);
