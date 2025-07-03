@@ -54,7 +54,7 @@ const worker = new Worker(
 
           // ✅ ใช้ token ล่าสุด
           await tweetToTwitterAccount(freshAccount, post);
-          
+
           await PostLog.create({
             postId: post._id,
             userId,
@@ -64,16 +64,26 @@ const worker = new Worker(
           });
           console.log(`✅ โพสต์สำเร็จ @${account.username}`);
         } catch (err) {
+          let fullError = '';
+
+          if (err.response?.data) {
+            fullError = JSON.stringify({
+              status: err.response.status,
+              data: err.response.data,
+              headers: err.response.headers
+            }, null, 2);
+          } else if (err.message) {
+            fullError = err.message;
+          } else {
+            fullError = JSON.stringify(err, null, 2);
+          }
+
           await PostLog.create({
             postId: post._id,
             userId,
             twitterAccountId: account._id,
             status: 'failed',
-            errorMessage: JSON.stringify(
-              err.response?.data || err.message || err,
-              Object.getOwnPropertyNames(err),
-              2
-            ),
+            errorMessage: fullError,
             tweetedAt: new Date()
           });
           console.error(`❌ โพสต์ล้มเหลว @${account.username}:`, err.message);
