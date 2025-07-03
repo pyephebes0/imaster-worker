@@ -53,6 +53,7 @@ const worker = new Worker(
           const freshAccount = await refreshTokenIfNeeded(account);
 
           // ✅ ใช้ token ล่าสุด
+          console.log(freshAccount);
           await tweetToTwitterAccount(freshAccount, post);
 
           await PostLog.create({
